@@ -320,6 +320,26 @@ class VideoPlayer {
             }
         });
 
+        // Audio Tracks
+        this.audioBtn = document.getElementById('player-audio-btn');
+        this.audioMenu = document.getElementById('player-audio-menu');
+        this.audioList = document.getElementById('player-audio-list');
+        this.audioMenuOpen = false;
+
+        this.audioBtn?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleAudioMenu();
+        });
+
+        // Close audio menu when clicking outside
+        document.addEventListener('click', (e) => {
+            if (this.audioMenuOpen &&
+                !this.audioMenu?.contains(e.target) &&
+                !this.audioBtn?.contains(e.target)) {
+                this.closeAudioMenu();
+            }
+        });
+
         // Fullscreen
         btnFullscreen?.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -597,6 +617,127 @@ class VideoPlayer {
         this.closeCaptionsMenu();
     }
 
+    /**
+     * Toggle audio menu visibility
+     */
+    toggleAudioMenu() {
+        if (!this.audioMenu) return;
+
+        this.audioMenuOpen = !this.audioMenuOpen;
+
+        if (this.audioMenuOpen) {
+            this.updateAudioTracks();
+            this.audioMenu.classList.remove('hidden');
+        } else {
+            this.audioMenu.classList.add('hidden');
+        }
+    }
+
+    /**
+     * Close audio menu
+     */
+    closeAudioMenu() {
+        if (!this.audioMenu) return;
+        this.audioMenuOpen = false;
+        this.audioMenu.classList.add('hidden');
+    }
+
+    /**
+     * Update available audio tracks in the menu
+     */
+    updateAudioTracks() {
+        if (!this.audioList) return;
+
+        // Clear existing list
+        this.audioList.innerHTML = '';
+
+        // If native HLS tracks exist (Direct HLS playing)
+        if (this.hls && this.hls.audioTracks && this.hls.audioTracks.length > 1) {
+            const tracks = this.hls.audioTracks;
+            for (let i = 0; i < tracks.length; i++) {
+                const track = tracks[i];
+                const btn = document.createElement('button');
+                btn.className = 'captions-option';
+
+                let label = track.name || track.lang || `Track ${i + 1}`;
+                btn.textContent = label;
+                btn.dataset.index = track.id;
+
+                if (this.hls.audioTrack === track.id) {
+                    btn.classList.add('active');
+                    btn.innerHTML += ' <span style="float: right;">✓</span>';
+                }
+
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.selectAudioTrack(track.id);
+                };
+
+                this.audioList.appendChild(btn);
+            }
+            return;
+        }
+
+        // If we probed tracks (Transcode/Direct MP4 playing)
+        if (this.currentStreamInfo && this.currentStreamInfo.audioTracks && this.currentStreamInfo.audioTracks.length > 0) {
+            const tracks = this.currentStreamInfo.audioTracks;
+            for (let i = 0; i < tracks.length; i++) {
+                const track = tracks[i];
+                const btn = document.createElement('button');
+                btn.className = 'captions-option';
+
+                let label = track.title || track.language || `Track ${track.audioIndex + 1}`;
+                btn.textContent = label;
+                btn.dataset.index = track.index; // Absolute stream index
+
+                // Mark active if it matches the current selection, or if nothing is selected and it's the first track
+                const isSelected = this.currentAudioTrack === track.index || (this.currentAudioTrack == null && i === 0);
+                if (isSelected) {
+                    btn.classList.add('active');
+                    btn.innerHTML += ' <span style="float: right;">✓</span>';
+                }
+
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.selectAudioTrack(track.index);
+                };
+
+                this.audioList.appendChild(btn);
+            }
+            return;
+        }
+
+        // Fallback
+        this.audioList.innerHTML = '<button class="captions-option active" data-index="-1">Default</button>';
+    }
+
+    /**
+     * Select an audio track
+     */
+    selectAudioTrack(trackId) {
+        if (this.hls && this.hls.audioTracks && this.hls.audioTracks.length > 1) {
+            this.hls.audioTrack = trackId;
+            this.closeAudioMenu();
+            return;
+        }
+
+        // Handle stream reloading with specific track via Transcode endpoint
+        if (this.currentStreamInfo && this.currentStreamInfo.audioTracks) {
+            if (this.currentAudioTrack === trackId) {
+                this.closeAudioMenu();
+                return;
+            }
+
+            this.currentAudioTrack = trackId;
+
+            // Reload video with the original URL, which will trigger a new transcode session
+            if (this.currentChannel) {
+                this.play(this.currentChannel);
+            }
+            this.closeAudioMenu();
+        }
+    }
+
     init() {
         // Apply default/remembered volume
         const volume = this.settings.rememberVolume ? this.settings.lastVolume : this.settings.defaultVolume;
@@ -617,6 +758,7 @@ class VideoPlayer {
         this.video.addEventListener('loadedmetadata', () => {
             if (this.video.videoHeight > 0) {
                 this.currentStreamInfo = {
+                    ...(this.currentStreamInfo || {}),
                     width: this.video.videoWidth,
                     height: this.video.videoHeight
                 };
@@ -850,8 +992,13 @@ class VideoPlayer {
     /**
      * Play a channel
      */
-    async play(channel, streamUrl) {
+    async play(channel) {
+        if (!channel) return;
         this.currentChannel = channel;
+
+        // Keep original URL for audio track switching
+        this.originalStreamUrl = channel.url || channel.options.url;
+        const streamUrl = this.originalStreamUrl;
 
         try {
             // Stop any WatchPage playback (movies/series) before starting Live TV
@@ -920,7 +1067,8 @@ class VideoPlayer {
                             videoMode,
                             videoCodec: info.video,
                             audioCodec: info.audio,
-                            audioChannels: info.audioChannels
+                            audioChannels: info.audioChannels,
+                            audioTrack: this.currentAudioTrack
                         });
                         this.currentUrl = playlistUrl; // Update currentUrl for HLS reload
 
@@ -961,7 +1109,10 @@ class VideoPlayer {
                 const statusMode = this.settings.upscaleEnabled ? 'upscaling' : 'transcoding';
                 console.log(`[Player] ${statusText} enabled. Starting session (encode)...`);
                 this.updateTranscodeStatus(statusMode, statusText);
-                const playlistUrl = await this.startTranscodeSession(streamUrl, { videoMode: 'encode' });
+                const playlistUrl = await this.startTranscodeSession(streamUrl, {
+                    videoMode: 'encode',
+                    audioTrack: this.currentAudioTrack
+                });
                 this.currentUrl = playlistUrl;
 
                 // Load HLS

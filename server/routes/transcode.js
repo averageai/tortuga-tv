@@ -29,7 +29,7 @@ transcodeSession.startCleanupInterval();
  * Body: { url: string, seekOffset?: number }
  */
 router.post('/session', async (req, res) => {
-    const { url, seekOffset, videoMode, videoCodec, audioCodec, audioChannels } = req.body;
+    const { url, seekOffset, videoMode, videoCodec, audioCodec, audioChannels, audioTrack } = req.body;
 
     if (!url) {
         return res.status(400).json({ error: 'URL is required' });
@@ -55,7 +55,8 @@ router.post('/session', async (req, res) => {
             videoMode: videoMode, // 'copy' or 'encode'
             videoCodec: videoCodec, // 'h264', 'hevc', etc.
             audioCodec: audioCodec, // 'aac', 'ac3', etc.
-            audioChannels: audioChannels // number of channels (2=stereo)
+            audioChannels: audioChannels, // number of channels (2=stereo)
+            audioTrack: audioTrack // Absolute stream index
         });
 
         await session.start();
@@ -160,7 +161,7 @@ router.get('/sessions', (req, res) => {
  * This fixes playback issues with Dolby/AC3/EAC3 audio that browsers can't decode.
  */
 router.get('/', async (req, res) => {
-    const { url } = req.query;
+    const { url, audioTrack } = req.query;
     if (!url) {
         return res.status(400).json({ error: 'URL parameter is required' });
     }
@@ -198,9 +199,18 @@ router.get('/', async (req, res) => {
         // Prevent Range/HEAD requests that some providers reject with 405
         '-seekable', '0',
         '-i', url,
-        // Map only first video and audio stream (avoid subtitle streams causing issues)
-        '-map', '0:v:0',
-        '-map', '0:a:0?', // ? makes audio optional if not present
+        // Map video and selected audio stream
+        '-map', '0:v:0'
+    ];
+
+    if (audioTrack !== undefined && audioTrack !== null) {
+        args.push('-map', `0:${audioTrack}`);
+    } else {
+        args.push('-map', '0:a:0?'); // ? makes audio optional if not present
+    }
+
+    // Continue building args
+    args.push(
         // Video: passthrough (no re-encoding = fast!)
         '-c:v', 'copy',
         // Audio: Transcode to browser-compatible AAC
@@ -218,7 +228,7 @@ router.get('/', async (req, res) => {
         '-movflags', 'frag_keyframe+empty_moov+default_base_moof+faststart',
         '-flush_packets', '1', // Send data immediately
         '-' // Output to stdout
-    ];
+    );
 
     console.log(`[Transcode] Full command: ${ffmpegPath} ${args.join(' ')}`);
 

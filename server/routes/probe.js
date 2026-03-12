@@ -111,6 +111,18 @@ function analyzeProbeResult(probeResult, url) {
             codec: s.codec_name
         }));
 
+    // Extract audio tracks
+    const audioTracks = streams
+        .filter(s => s.codec_type === 'audio')
+        .map((s, i) => ({
+            index: s.index,
+            audioIndex: i,
+            language: s.tags?.language || 'und',
+            title: s.tags?.title || s.tags?.language || `Track ${i + 1}`,
+            codec: s.codec_name,
+            channels: s.channels
+        }));
+
     // Determine what processing is needed
     // 4. MKV files often cause OOM/decoding issues in browser fMP4 remux, 
     // so we force them to "needsTranscode" which uses HLS (more robust).
@@ -135,7 +147,8 @@ function analyzeProbeResult(probeResult, url) {
         compatible: compatible,
         needsRemux: needsRemux,
         needsTranscode: needsTranscode,
-        subtitles: subtitles
+        subtitles: subtitles,
+        audioTracks: audioTracks
     };
 }
 

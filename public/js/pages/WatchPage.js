@@ -15,6 +15,7 @@ class WatchPage {
         if (this.video) {
             this.video.setAttribute('playsinline', '');
             this.video.setAttribute('webkit-playsinline', '');
+            this.video.controls = false; // explicitly disable native controls
         }
 
         // Top bar
@@ -64,6 +65,12 @@ class WatchPage {
         this.captionsBtn = document.getElementById('watch-captions-btn');
         this.captionsMenu = document.getElementById('watch-captions-menu');
         this.captionsList = document.getElementById('watch-captions-list');
+
+        // Audio Tracks
+        this.audioBtn = document.getElementById('watch-audio-btn');
+        this.audioMenu = document.getElementById('watch-audio-menu');
+        this.audioList = document.getElementById('watch-audio-list');
+        this.audioMenuOpen = false;
 
         // Transcode Status
         this.transcodeStatusEx = document.getElementById('watch-transcode-status');
@@ -226,6 +233,19 @@ class WatchPage {
         document.addEventListener('click', (e) => {
             if (this.captionsMenuOpen && !this.captionsMenu?.contains(e.target) && e.target !== this.captionsBtn) {
                 this.closeCaptionsMenu();
+            }
+        });
+
+        // Audio Tracks toggle
+        this.audioBtn?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleAudioMenu();
+        });
+
+        // Close audio menu when clicking outside
+        document.addEventListener('click', (e) => {
+            if (this.audioMenuOpen && !this.audioMenu?.contains(e.target) && e.target !== this.audioBtn) {
+                this.closeAudioMenu();
             }
         });
 
@@ -410,6 +430,8 @@ class WatchPage {
     }
 
     async loadVideo(url) {
+        // Store original URL for audio track switching reload
+        this.originalStreamUrl = url;
         // Store the URL for copy functionality
         this.currentUrl = url;
 
@@ -460,7 +482,8 @@ class WatchPage {
                         seekOffset: this.resumeTime, // Ensure seekOffset is passed
                         videoCodec: info.video,
                         audioCodec: info.audio,
-                        audioChannels: info.audioChannels
+                        audioChannels: info.audioChannels,
+                        audioTrack: this.currentAudioTrack
                     });
                     this.playHls(playlistUrl);
                     this.setVolumeFromStorage();
@@ -494,7 +517,8 @@ class WatchPage {
             this.updateTranscodeStatus(statusMode, statusText);
             const playlistUrl = await this.startTranscodeSession(url, {
                 videoMode: 'encode',
-                seekOffset: this.resumeTime
+                seekOffset: this.resumeTime,
+                audioTrack: this.currentAudioTrack
             });
             this.playHls(playlistUrl);
             this.setVolumeFromStorage();
@@ -517,7 +541,8 @@ class WatchPage {
             const playlistUrl = await this.startTranscodeSession(url, {
                 videoMode: 'copy',
                 videoCodec,
-                seekOffset: this.resumeTime
+                seekOffset: this.resumeTime,
+                audioTrack: this.currentAudioTrack
             });
             this.playHls(playlistUrl);
             this.setVolumeFromStorage();
@@ -693,6 +718,19 @@ class WatchPage {
                 document.webkitExitFullscreen();
             }
         } else {
+            const isMobile = () => /Mobi|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            // Mobile Safari fallback to standard webkit player
+            if (isMobile()) {
+                if (this.video?.requestFullscreen) {
+                    this.video.requestFullscreen().catch(err => console.error('Fullscreen error:', err));
+                } else if (this.video?.webkitEnterFullscreen) {
+                    this.video.webkitEnterFullscreen();
+                } else if (this.video?.webkitRequestFullscreen) {
+                    this.video.webkitRequestFullscreen();
+                }
+                return;
+            }
+
             if (container?.requestFullscreen) {
                 container.requestFullscreen();
             } else if (container?.webkitRequestFullscreen) {
@@ -801,6 +839,7 @@ class WatchPage {
         // Detect resolution
         if (this.video && this.video.videoHeight > 0) {
             this.currentStreamInfo = {
+                ...(this.currentStreamInfo || {}),
                 width: this.video.videoWidth,
                 height: this.video.videoHeight
             };
@@ -1397,6 +1436,131 @@ class WatchPage {
     startHistoryTracking() {
         this.stopHistoryTracking(); // Clear existing if any
         this.historyInterval = setInterval(() => this.saveProgress(), 10000); // 10s
+    }
+
+    /**
+     * Toggle audio menu visibility
+     */
+    toggleAudioMenu() {
+        if (!this.audioMenu) return;
+
+        this.audioMenuOpen = !this.audioMenuOpen;
+
+        if (this.audioMenuOpen) {
+            this.updateAudioTracks();
+            this.audioMenu.classList.remove('hidden');
+        } else {
+            this.audioMenu.classList.add('hidden');
+        }
+    }
+
+    /**
+     * Close audio menu
+     */
+    closeAudioMenu() {
+        if (!this.audioMenu) return;
+        this.audioMenuOpen = false;
+        this.audioMenu.classList.add('hidden');
+    }
+
+    /**
+     * Update available audio tracks in the menu
+     */
+    updateAudioTracks() {
+        if (!this.audioList) return;
+
+        // Clear existing list
+        this.audioList.innerHTML = '';
+
+        // If native HLS tracks exist (Direct HLS playing)
+        if (this.hls && this.hls.audioTracks && this.hls.audioTracks.length > 1) {
+            const tracks = this.hls.audioTracks;
+            for (let i = 0; i < tracks.length; i++) {
+                const track = tracks[i];
+                const btn = document.createElement('button');
+                btn.className = 'captions-option';
+
+                let label = track.name || track.lang || `Track ${i + 1}`;
+                btn.textContent = label;
+                btn.dataset.index = track.id;
+
+                if (this.hls.audioTrack === track.id) {
+                    btn.classList.add('active');
+                    btn.innerHTML += ' <span style="float: right;">✓</span>';
+                }
+
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.selectAudioTrack(track.id);
+                };
+
+                this.audioList.appendChild(btn);
+            }
+            return;
+        }
+
+        // If we probed tracks (Transcode/Direct MP4 playing)
+        if (this.currentStreamInfo && this.currentStreamInfo.audioTracks && this.currentStreamInfo.audioTracks.length > 0) {
+            const tracks = this.currentStreamInfo.audioTracks;
+            for (let i = 0; i < tracks.length; i++) {
+                const track = tracks[i];
+                const btn = document.createElement('button');
+                btn.className = 'captions-option';
+
+                let label = track.title || track.language || `Track ${track.audioIndex + 1}`;
+                btn.textContent = label;
+                btn.dataset.index = track.index; // Absolute stream index
+
+                // Mark active if it matches the current selection, or if nothing is selected and it's the first track
+                const isSelected = this.currentAudioTrack === track.index || (this.currentAudioTrack == null && i === 0);
+                if (isSelected) {
+                    btn.classList.add('active');
+                    btn.innerHTML += ' <span style="float: right;">✓</span>';
+                }
+
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.selectAudioTrack(track.index);
+                };
+
+                this.audioList.appendChild(btn);
+            }
+            return;
+        }
+
+        // Fallback
+        this.audioList.innerHTML = '<button class="captions-option active" data-index="-1">Default</button>';
+    }
+
+    /**
+     * Select an audio track
+     */
+    selectAudioTrack(trackId) {
+        if (this.hls && this.hls.audioTracks && this.hls.audioTracks.length > 1) {
+            this.hls.audioTrack = trackId;
+            this.closeAudioMenu();
+            return;
+        }
+
+        // Handle stream reloading with specific track via Transcode endpoint
+        if (this.currentStreamInfo && this.currentStreamInfo.audioTracks) {
+            if (this.currentAudioTrack === trackId) {
+                this.closeAudioMenu();
+                return;
+            }
+
+            this.currentAudioTrack = trackId;
+
+            if (this.video && !this.video.paused) {
+                this.resumeTime = Math.floor(this.video.currentTime);
+            }
+
+            // Reload video with the original URL, which will trigger a new transcode session
+            if (this.originalStreamUrl) {
+                this.loadVideo(this.originalStreamUrl);
+            }
+            this.closeAudioMenu();
+        }
     }
 
     stopHistoryTracking() {
