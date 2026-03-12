@@ -149,6 +149,13 @@ const API = {
         // Cache management
         cache: {
             clear: (sourceId) => API.request('DELETE', `/proxy/cache/${sourceId}`)
+        },
+
+        // Image proxy to fix mixed content
+        image: (url) => {
+            if (!url) return '/img/placeholder.png';
+            if (url.startsWith('http')) return `/api/proxy/image?url=${encodeURIComponent(url)}`;
+            return url;
         }
     },
 

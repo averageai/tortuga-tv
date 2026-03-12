@@ -1179,7 +1179,7 @@ class WatchPage {
 
         this.recommendedGrid.innerHTML = movies.map(movie => `
             <div class="watch-recommended-card" data-id="${movie.stream_id}" data-source="${sourceId}">
-                <img src="${movie.stream_icon || movie.cover || '/img/placeholder.png'}" 
+                <img src="${API.proxy.image(movie.stream_icon || movie.cover)}" 
                      alt="${movie.name}" 
                      onerror="this.onerror=null;this.src='/img/placeholder.png'" loading="lazy">
                 <p>${movie.name}</p>
@@ -1208,7 +1208,7 @@ class WatchPage {
                     type: 'movie',
                     id: movie.stream_id,
                     title: movie.name,
-                    poster: movie.stream_icon || movie.cover,
+                    poster: API.proxy.image(movie.stream_icon || movie.cover),
                     description: movie.plot || '',
                     year: movie.year,
                     rating: movie.rating,

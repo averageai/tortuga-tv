@@ -288,7 +288,7 @@ class SeriesPage {
             card.dataset.seriesId = series.series_id;
             card.dataset.sourceId = series.sourceId;
 
-            const poster = series.cover || '/img/placeholder.png';
+            const poster = API.proxy.image(series.cover);
             const year = series.year || series.releaseDate?.substring(0, 4) || '';
             const rating = series.rating ? `${Icons.star} ${series.rating}` : '';
 
@@ -350,7 +350,7 @@ class SeriesPage {
         this.detailsPanel.classList.remove('hidden');
 
         // Set header info
-        document.getElementById('series-poster').src = series.cover || '/img/placeholder.png';
+        document.getElementById('series-poster').src = API.proxy.image(series.cover);
         document.getElementById('series-title').textContent = series.name;
         document.getElementById('series-plot').textContent = series.plot || '';
 

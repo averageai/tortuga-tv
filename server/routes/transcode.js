@@ -225,7 +225,7 @@ router.get('/', async (req, res) => {
         '-max_muxing_queue_size', '2048',
         // Fragmented MP4 for streaming (browser-compatible)
         '-f', 'mp4',
-        '-movflags', 'frag_keyframe+empty_moov+default_base_moof+faststart',
+        '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
         '-flush_packets', '1', // Send data immediately
         '-' // Output to stdout
     );
@@ -246,6 +246,7 @@ router.get('/', async (req, res) => {
     // Set headers for fragmented MP4
     res.setHeader('Content-Type', 'video/mp4');
     res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Accept-Ranges', 'none'); // Prevent browser from attempting Range requests on a live direct stream
 
     // Pipe stdout to response
     ffmpeg.stdout.pipe(res);

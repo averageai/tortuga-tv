@@ -845,7 +845,7 @@ video::cue {
 
 .player-overlay {
   position: absolute;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1546,7 +1546,7 @@ kbd {
 .modal {
   display: none;
   position: fixed;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   z-index: 1000;
   align-items: center;
   justify-content: center;
@@ -2905,7 +2905,7 @@ kbd {
 
 .movie-play-overlay {
   position: absolute;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3046,7 +3046,7 @@ kbd {
 
 .series-play-overlay {
   position: absolute;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3089,7 +3089,7 @@ kbd {
 /* Series Details Panel */
 .series-details {
   position: absolute;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   background: var(--color-bg-primary);
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
@@ -3378,7 +3378,7 @@ kbd {
 /* Player Overlay */
 .watch-overlay {
   position: absolute;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -4300,7 +4300,7 @@ kbd {
 .modal-overlay .modal {
   display: block;
   position: relative;
-  inset: auto;
+  top: auto; right: auto; bottom: auto; left: auto;
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -4688,7 +4688,7 @@ kbd {
 
 .play-icon-overlay {
   position: absolute;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   display: flex;
   align-items: center;
   justify-content: center;
